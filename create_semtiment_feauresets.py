@@ -5,6 +5,7 @@ import random
 import pickle
 from collections import Counter
 from nltk.stem import WordNetLemmatizer
+import io
 
 lemmatizer = WordNetLemmatizer()
 hm_lines = 100000
@@ -12,13 +13,13 @@ hm_lines = 100000
 def create_lexicon(pos,neg):
 
 	lexicon = []
-	with open(pos,'r') as f:
+	with io.open(pos, 'r', encoding='cp437') as f:
 		contents = f.readlines()
 		for l in contents[:hm_lines]:
 			all_words = word_tokenize(l)
 			lexicon += list(all_words)
 
-	with open(neg,'r') as f:
+	with io.open(neg, 'r', encoding='cp437') as f:
 		contents = f.readlines()
 		for l in contents[:hm_lines]:
 			all_words = word_tokenize(l)
@@ -42,7 +43,7 @@ def sample_handling(sample,lexicon,classification):
 
 	featureset = []
 
-	with open(sample,'r') as f:
+	with io.open(sample, 'r', encoding='cp437') as f:
 		contents = f.readlines()
 		for l in contents[:hm_lines]:
 			current_words = word_tokenize(l.lower())
@@ -63,8 +64,8 @@ def sample_handling(sample,lexicon,classification):
 def create_feature_sets_and_labels(pos,neg,test_size = 0.1):
 	lexicon = create_lexicon(pos,neg)
 	features = []
-	features += sample_handling('pos.txt',lexicon,[1,0])
-	features += sample_handling('neg.txt',lexicon,[0,1])
+	features += sample_handling('data/pos.txt',lexicon,[1,0])
+	features += sample_handling('data/neg.txt',lexicon,[0,1])
 	random.shuffle(features)
 	features = np.array(features)
 
@@ -79,7 +80,7 @@ def create_feature_sets_and_labels(pos,neg,test_size = 0.1):
 
 
 if __name__ == '__main__':
-	train_x,train_y,test_x,test_y = create_feature_sets_and_labels('data/polarity.pos','data/polarity.neg')
+	train_x,train_y,test_x,test_y = create_feature_sets_and_labels('data/pos.txt','data/neg.txt')
 	# if you want to pickle this data:
-	with open('data.sentiment_features.pickle','wb') as f:
+	with open('data/sentiment_set.pickle','wb') as f:
 		pickle.dump([train_x,train_y,test_x,test_y],f)

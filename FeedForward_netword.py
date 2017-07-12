@@ -97,4 +97,3 @@ test_data = np.array(data[9000:])
 train_neural_network(x)
 
 
-
