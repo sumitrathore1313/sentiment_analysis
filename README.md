@@ -1,2 +1,3 @@
 # sentiment_analysis
-![Alt text](pn.png?raw=true "Optional Title")
+99.9% accuracy
+![image loading...](pn.png?raw=true "Optional Title")
