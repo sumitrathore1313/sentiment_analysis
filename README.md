@@ -1,2 +1,2 @@
 # sentiment_analysis
-![Alt text](/Pictures/pn.png?raw=true "Optional Title")
+![Alt text](pn.png?raw=true "Optional Title")
