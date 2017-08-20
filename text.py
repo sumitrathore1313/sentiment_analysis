@@ -1,93 +1,82 @@
-from create_semtiment_feauresets import create_feature_sets_and_labels
 import tensorflow as tf
-# from tensorflow.examples.tutorials.mnist import input_data
-import pickle
 import numpy as np
-import cPickle
+import datetime
+tf.reset_default_graph()
 
-#train_x, train_y, test_x, test_y = create_feature_sets_and_labels('data/pos.txt', 'data/neg.txt')
+class LstmNN():
 
-f = open('data/sen2vec.p', 'rb')
-data = cPickle.load(f)
-train_data = np.array(data[0:9000])
-test_data = np.array(data[9000:])
-train_x = np.array(list(train_data[:, 0]))
-train_y = np.array(list(train_data[:, 1]))
-test_x = np.array(list(test_data[:, 0]))
-test_y = np.array(list(test_data[:, 1]))
-print len(train_x), len(test_x)
+    def __init__(self, batchSize = 24, lstmUnits = 64, numClasses = 2, iterations = 100000):
 
-n_nodes_hl1 = 1500
-n_nodes_hl2 = 1500
-n_nodes_hl3 = 1500
+        self.batch_size = batchSize
+        self.lstmUnits = lstmUnits
+        self.numClasses = numClasses
+        self.iterations = iterations
 
-n_classes = 2
-batch_size = 100
-hm_epochs = 10
-
-x = tf.placeholder('float')
-y = tf.placeholder('float')
-
-hidden_1_layer = {'f_fum': n_nodes_hl1,
-                  'weight': tf.Variable(tf.random_normal([len(train_x[0]), n_nodes_hl1])),
-                  'bias': tf.Variable(tf.random_normal([n_nodes_hl1]))}
-
-hidden_2_layer = {'f_fum': n_nodes_hl2,
-                  'weight': tf.Variable(tf.random_normal([n_nodes_hl1, n_nodes_hl2])),
-                  'bias': tf.Variable(tf.random_normal([n_nodes_hl2]))}
-
-hidden_3_layer = {'f_fum': n_nodes_hl3,
-                  'weight': tf.Variable(tf.random_normal([n_nodes_hl2, n_nodes_hl3])),
-                  'bias': tf.Variable(tf.random_normal([n_nodes_hl3]))}
-
-output_layer = {'f_fum': None,
-                'weight': tf.Variable(tf.random_normal([n_nodes_hl3, n_classes])),
-                'bias': tf.Variable(tf.random_normal([n_classes])), }
+        self.x = tf.Variable(tf.zeros([batchSize, 53, 100]),dtype=tf.float32)
+        self.y = tf.placeholder(tf.float32, [batchSize, numClasses])
 
 
-# Nothing changes
-def neural_network_model(data):
-    l1 = tf.add(tf.matmul(data, hidden_1_layer['weight']), hidden_1_layer['bias'])
-    l1 = tf.nn.relu(l1)
+    def train_neural_network(self, train_data, test_data):
 
-    l2 = tf.add(tf.matmul(l1, hidden_2_layer['weight']), hidden_2_layer['bias'])
-    l2 = tf.nn.relu(l2)
+        lstmCell = tf.contrib.rnn.BasicLSTMCell(self.lstmUnits)
+        lstmCell = tf.contrib.rnn.DropoutWrapper(cell=lstmCell, output_keep_prob=0.75)
+        value, _ = tf.nn.dynamic_rnn(lstmCell, self.x, dtype=tf.float32)
+        weight = tf.Variable(tf.truncated_normal([self.lstmUnits, self.numClasses]))
+        bias = tf.Variable(tf.constant(0.1, shape=[self.numClasses]))
+        value = tf.transpose(value, [1, 0, 2])
+        last = tf.gather(value, int(value.get_shape()[0]) - 1)
+        prediction = (tf.matmul(last, weight) + bias)
+        correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(self.y, 1))
+        accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
 
-    l3 = tf.add(tf.matmul(l2, hidden_3_layer['weight']), hidden_3_layer['bias'])
-    l3 = tf.nn.relu(l3)
+        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=self.y))
+        optimizer = tf.train.AdamOptimizer().minimize(cost)
 
-    output = tf.matmul(l3, output_layer['weight']) + output_layer['bias']
+        sess = tf.InteractiveSession()
+        saver = tf.train.Saver()
+        sess.run(tf.global_variables_initializer())
 
-    return output
+        tf.summary.scalar('Loss', cost)
+        tf.summary.scalar('Accuracy', accuracy)
+        merged = tf.summary.merge_all()
+        logdir = "tensorboard/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "/"
+        writer = tf.summary.FileWriter(logdir, sess.graph)
+
+        for i in range(self.iterations):
+
+            #Next Batch of reviews
+            nextBatch, nextBatchLabels = getTrainBatch();
+            sess.run(optimizer, {self.x: nextBatch, self.y: nextBatchLabels})
+
+            #Write summary to Tensorboard
+            if (i % 50 == 0):
+                summary = sess.run(merged, {input_data: nextBatch, labels: nextBatchLabels})
+                writer.add_summary(summary, i)
+
+            #Save the network every 10,000 training iterations
+            if (i % 10000 == 0 and i != 0):
+                save_path = saver.save(sess, "models/pretrained_lstm.ckpt", global_step=i)
+                print("saved to %s" % save_path)
+        writer.close()
+
+        hm_epochs = 10
+
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+
+            for epoch in range(hm_epochs):
+                epoch_loss = 0
+                for _ in range(len(train_data) / self.batch_size):
+                    train_x = np.array(list(train_data[_ * self.batch_size:(_ + 1) * self.batch_size, 0]))
+                    train_y = np.array(list(train_data[_ * self.batch_size:(_ + 1) * self.batch_size, 1]))
+                    _, c = sess.run([optimizer, cost], feed_dict={self.x: train_x, self.y: train_y})
+                    epoch_loss += c
+                print "Epoch", epoch, "completed out of ", hm_epochs, "loss: ", epoch_loss
 
 
-def train_neural_network(x):
-    prediction = neural_network_model(x)
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=y))
-    optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(cost)
 
-    with tf.Session() as sess:
-        sess.run(tf.initialize_all_variables())
-
-        for epoch in range(hm_epochs):
-            epoch_loss = 0
-            i = 0
-            while i < len(train_x):
-                start = i
-                end = i + batch_size
-                batch_x = np.array(train_x[start:end])
-                batch_y = np.array(train_y[start:end])
-
-                _, c = sess.run([optimizer, cost], feed_dict={x: batch_x,
-                                                              y: batch_y})
-                epoch_loss += c
-                i += batch_size
-
-            print('Epoch', epoch + 1, 'completed out of', hm_epochs, 'loss:', epoch_loss)
-        correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(y, 1))
-        accuracy = tf.reduce_mean(tf.cast(correct, 'float'))
-
-        print('Accuracy:', accuracy.eval({x: test_x, y: test_y}))
+            print "Accuracy", accuracy.eval(
+                {self.x: np.array(list(test_data[:, 0])), self.y: np.array(list(test_data[:, 1]))})
 
 
-train_neural_network(x)
+
